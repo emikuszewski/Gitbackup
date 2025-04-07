@@ -1,0 +1,27 @@
+---
+# Git configuration
+git:
+  repo: "https://github.com/organization/plainid-configs.git"
+  token: "ghp_abcdefghijklmnopqrstuvwxyz123456"
+  branch: "main"
+
+# PlainID configuration
+plainid:
+  base-url: "https://your-plainid-instance.com"
+  client-id: "your-client-id-here"
+  client-secret: "your-client-secret-here"
+  envs:
+    - id: "some_test_id"
+      workspaces:
+        - id: "some_test_id"
+    # - id: "some_test_id"
+    #   workspaces:
+    #     - id: "*"
+    # - id: "*"
+  identities:
+    - User
+    - Services
+
+# Command options
+# Uncomment to enable dry run mode
+# dry-run: true

@@ -1,0 +1,5 @@
+.vscode/
+__debug*
+.git-backup
+temp/
+git-backup
