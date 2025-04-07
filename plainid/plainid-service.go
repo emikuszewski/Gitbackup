@@ -1,0 +1,448 @@
+package plainid
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"net/url"
+
+	"github.com/plainid/git-backup/config"
+	"golang.org/x/oauth2/clientcredentials"
+)
+
+type Policy struct {
+	ID         string `json:"id"`
+	Name       string `json:"name"`
+	State      string `json:"state"`
+	AccessType string `json:"accessType"`
+}
+
+type Meta struct {
+	Total  int `json:"total"`
+	Limit  int `json:"limit"`
+	Offset int `json:"offset"`
+}
+
+type PolicyResponse struct {
+	Data []Policy `json:"data"`
+	Meta Meta     `json:"meta"`
+}
+
+type Application struct {
+	WSID             string   `json:"-"` // Use `-` to omit this field when marshaling to JSON
+	ID               string   `json:"applicationId"`
+	Name             string   `json:"displayName"`
+	Description      string   `json:"description"`
+	LogoURL          string   `json:"logoUrl"`
+	ColorIndication  string   `json:"colorIndication"`
+	AssetTemplateIDs []string `json:"assetTemplateIds"`
+}
+
+type Environment struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+type Workspace struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+func (s Application) AsJSON() (string, error) {
+	b, err := json.Marshal(s)
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
+}
+
+type Service struct {
+	cfg    config.Config
+	client *http.Client
+}
+
+func NewService(cfg config.Config) *Service {
+
+	oauth2Config := clientcredentials.Config{
+		ClientID:     cfg.PlainID.ClientID,
+		ClientSecret: cfg.PlainID.ClientSecret,
+		TokenURL:     fmt.Sprintf("%s/api/1.0/api-key/token", cfg.PlainID.BaseURL),
+	}
+
+	client := oauth2Config.Client(context.Background())
+
+	return &Service{
+		cfg:    cfg,
+		client: client,
+	}
+}
+
+func (s Service) Environments() ([]Environment, error) {
+	baseURL := fmt.Sprintf("%s/env-mgmt/environment", s.cfg.PlainID.BaseURL)
+
+	req, err := http.NewRequest("GET", baseURL, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("failed to get environments for whildcard:  %s %s", resp.Status, body)
+	}
+
+	type EnvsResponse struct {
+		Data []Environment `json:"data"`
+		Meta Meta          `json:"meta"`
+	}
+
+	var envsResp EnvsResponse
+	err = json.Unmarshal(body, &envsResp)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse environments response: %w", err)
+	}
+
+	return envsResp.Data, nil
+}
+
+func (s Service) Workspaces(envID string) ([]Workspace, error) {
+	baseURL := fmt.Sprintf("%s/env-mgmt/1.0-int.1/authorization-workspaces/%s?offset=0&limit=100", s.cfg.PlainID.BaseURL, envID)
+
+	req, err := http.NewRequest("GET", baseURL, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("failed to get environments for whildcard:  %s %s", resp.Status, body)
+	}
+
+	type WSsResponse struct {
+		Data []Workspace `json:"data"`
+		Meta Meta        `json:"meta"`
+	}
+
+	var wssResp WSsResponse
+	err = json.Unmarshal(body, &wssResp)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse workspaces response: %w", err)
+	}
+
+	return wssResp.Data, nil
+}
+
+func (s Service) Applications(envID, wsID string) ([]Application, error) {
+	type AppInfo struct {
+		ID   string `json:"id"`
+		Name string `json:"name"`
+		WSID string `json:"authWsId"`
+	}
+
+	type AppInfoResponse struct {
+		Data   []AppInfo `json:"data"`
+		Total  int       `json:"total"`
+		Limit  int       `json:"limit"`
+		Offset int       `json:"offset"`
+	}
+
+	limit := 50
+	offset := 0
+	var appInfos []AppInfo
+
+	for {
+		uRL := fmt.Sprintf("%s/policy-mgmt/1.0/applications/%s?detailed=true&limit=%d&offset=%d",
+			s.cfg.PlainID.BaseURL,
+			envID,
+			limit,
+			offset)
+
+		req, err := http.NewRequest("GET", uRL, nil)
+		if err != nil {
+			return nil, err
+		}
+
+		resp, err := s.client.Do(req)
+		if err != nil {
+			return nil, err
+		}
+
+		body, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+
+		if err != nil {
+			return nil, err
+		}
+
+		if resp.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("failed to download apps for %s: %s %s", wsID, resp.Status, body)
+		}
+
+		var appResp AppInfoResponse
+		err = json.Unmarshal(body, &appResp)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse applications response: %w", err)
+		}
+
+		// Append apps only from specific workspace
+		for _, app := range appResp.Data {
+			if app.WSID == wsID {
+				appInfos = append(appInfos, app)
+			}
+		}
+
+		// Check if we've retrieved all apps
+		if len(appResp.Data) < limit || offset+len(appResp.Data) >= appResp.Total {
+			break
+		}
+		// Move to the next page
+		offset += limit
+	}
+
+	// export applications
+	apps := make([]Application, 0, len(appInfos))
+	for _, appInfo := range appInfos {
+		baseURL := fmt.Sprintf("%s/api/1.0/applications/%s/%s", s.cfg.PlainID.BaseURL, envID, appInfo.ID)
+
+		req, err := http.NewRequest("GET", baseURL, nil)
+		if err != nil {
+			return nil, err
+		}
+
+		resp, err := s.client.Do(req)
+		if err != nil {
+			return nil, err
+		}
+
+		defer resp.Body.Close()
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return nil, err
+		}
+
+		if resp.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("failed to download application for %s: %s %s", appInfo.ID, resp.Status, body)
+		}
+
+		type AppResponse struct {
+			Data Application `json:"data"`
+		}
+
+		var appResponse AppResponse
+		err = json.Unmarshal(body, &appResponse)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse applications response: %w", err)
+		}
+
+		app := appResponse.Data
+		app.WSID = appInfo.WSID
+		apps = append(apps, app)
+	}
+
+	return apps, nil
+}
+
+// returns App policies
+func (s Service) AppPolicies(envID, wsID, appID string) ([]string, error) {
+	//todo at the moment we support up to 1000 policies per app which should be enough
+	baseURL := fmt.Sprintf("%s/policy-mgmt/1.0/policies/%s?%s=%s", s.cfg.PlainID.BaseURL, envID,
+		url.QueryEscape("filter[appId]"), appID)
+
+	req, err := http.NewRequest("GET", baseURL, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("failed to download policies for %s: %s %s", appID, resp.Status, body)
+	}
+
+	var pols PolicyResponse
+	err = json.Unmarshal(body, &pols)
+
+	// retrieve policies now
+	policies := make([]string, 0)
+	for _, pol := range pols.Data {
+		if pol.State == "Inactive" {
+			continue
+		}
+		baseURL = fmt.Sprintf("%s/api/2.0/policies/%s?%s=%s&%s=%s&extendedSchema=true", s.cfg.PlainID.BaseURL, envID,
+			url.QueryEscape("filter[authWsId]"), wsID, url.QueryEscape("filter[id]"), pol.ID)
+		req, err = http.NewRequest("GET", baseURL, nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed to download policy for %s: %w", err)
+		}
+		req.Header.Set("Accept", "text/plain;language=rego")
+
+		resp, err := s.client.Do(req)
+		if err != nil {
+			return nil, err
+		}
+
+		defer resp.Body.Close()
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return nil, err
+		}
+
+		if resp.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("failed to download policy for %s: %s %s", wsID, resp.Status, body)
+		}
+
+		policies = append(policies, string(body))
+	}
+	return policies, err
+}
+
+func (s Service) AppAPIMapper(envID, appID string) (string, error) {
+	baseURL := fmt.Sprintf("%s/api/1.0/api-mapper-sets/%s/%s", s.cfg.PlainID.BaseURL, envID, appID)
+
+	req, err := http.NewRequest("GET", baseURL, nil)
+	if err != nil {
+		return "", err
+	}
+
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("failed to download api mapper for %s: %s %s", appID, resp.Status, body)
+	}
+
+	return string(body), nil
+}
+
+func (s Service) AssetTemplateIDs(wsID string) ([]string, error) {
+	baseURL := fmt.Sprintf("%s/internal-assets/4.0/asset-types?offset=0&limit=50&%s=%s", s.cfg.PlainID.BaseURL, url.QueryEscape("filter[ownerId]"), wsID)
+
+	req, err := http.NewRequest("GET", baseURL, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("failed to fetch asset templates for %s: %s %s", wsID, resp.Status, body)
+	}
+
+	type AssetTemplatesResp struct {
+		Data []struct {
+			ID          string `json:"id"`
+			ExtID       string `json:"externalId"`
+			Name        string `json:"name"`
+			Description string `json:"description"`
+			OwnerID     string `json:"ownerId"`
+		}
+	}
+
+	var appResponse AssetTemplatesResp
+	err = json.Unmarshal(body, &appResponse)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse applications response: %w", err)
+	}
+
+	var assetTemplateIDs []string
+	for _, app := range appResponse.Data {
+		assetTemplateIDs = append(assetTemplateIDs, app.ExtID)
+	}
+	return assetTemplateIDs, nil
+}
+
+func (s Service) AssetTemplate(envID, assetTemplateID string) (string, error) {
+	baseURL := fmt.Sprintf("%s/api/1.0/asset-templates/%s/%s", s.cfg.PlainID.BaseURL, envID, assetTemplateID)
+
+	req, err := http.NewRequest("GET", baseURL, nil)
+	if err != nil {
+		return "", err
+	}
+
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("failed to download asset template ID for %s: %s %s", assetTemplateID, resp.Status, body)
+	}
+
+	return string(body), nil
+}
+
+func (s Service) IdentityTemplates(envID, identityID string) (string, error) {
+	baseURL := fmt.Sprintf("%s/api/1.0/identity-templates/%s/%s", s.cfg.PlainID.BaseURL, envID, identityID)
+	req, err := http.NewRequest("GET", baseURL, nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("failed to download apps for %s: %s %s", envID, resp.Status, body)
+	}
+
+	return string(body), nil
+}
