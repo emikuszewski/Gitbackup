@@ -186,7 +186,7 @@ func fetchPlainIDConfiguration(envDir, wsDir, envID, wsID string) error {
 			return fmt.Errorf("failed to fetch asset template %s : %w", assetTemplateID, err)
 		}
 
-		path := fmt.Sprintf("%s/asset-template_%d.json", envDir, i)
+		path := fmt.Sprintf("%s/asset-template_%d.json", wsDir, i)
 		if err := os.WriteFile(path, []byte(assetTemplate), 0600); err != nil {
 			return fmt.Errorf("failed to write asset template %s: %w", assetTemplateID, err)
 		}
