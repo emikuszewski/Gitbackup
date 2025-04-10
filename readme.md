@@ -9,6 +9,7 @@ To avoid merge conflicts we are using technique called `Detached commits when ta
 
 Configuration could be provided in a form of a file or environment variables.  
 In case of file, it should be placed in the same directory as the binary or home directory and named `.git-backup`.
+You can also specify a custom config file path using the `-f` or `--file` flag when running the command.
 
 The configuration file uses YAML format with the following structure:
 
@@ -75,6 +76,11 @@ Before running the git-backup tool, you need to configure it using one of the fo
 ```bash
 # Using configuration file (already set up)
 ./git-backup
+
+# Using custom configuration file
+./git-backup -f /path/to/my-config.yaml
+# or
+./git-backup --file /path/to/my-config.yaml
 
 # Using environment variables
 export git_repo="https://github.com/organization/repo.git"
