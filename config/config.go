@@ -29,6 +29,7 @@ type Environment struct {
 	ID         string `mapstructure:"id"`
 	Name       string
 	Workspaces []Workspace `mapstructure:"workspaces"`
+	Identities []string    `mapstructure:"identities"`
 }
 
 // HasWildcardWorkspace checks if the environment has a wildcard workspace configuration
@@ -63,7 +64,6 @@ type PlainIDConfig struct {
 	ClientID     string        `mapstructure:"client-id"`
 	ClientSecret string        `mapstructure:"client-secret"`
 	Envs         []Environment `mapstructure:"envs"`
-	Identities   []string      `mapstructure:"identities"`
 }
 
 // HasWildcardEnvironment checks if there's a wildcard environment in the configuration
@@ -217,12 +217,11 @@ func validateConfig(cfg *Config) error {
 			if len(env.Workspaces) == 0 && !env.IsWildcard() {
 				missingFields = append(missingFields, fmt.Sprintf("plainid.envs[%d].workspaces", i))
 			}
+			// Check for identities in each environment
+			if len(env.Identities) == 0 {
+				missingFields = append(missingFields, fmt.Sprintf("plainid.envs[%d].identities", i))
+			}
 		}
-	}
-
-	// Check for identities
-	if len(cfg.PlainID.Identities) == 0 {
-		missingFields = append(missingFields, "plainid.identities")
 	}
 
 	if len(missingFields) > 0 {

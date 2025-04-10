@@ -29,15 +29,17 @@ plainid:
           workspaces:
               - id: "workspace-id-1"
               - id: "workspace-id-2"
+          identities:
+              - User
+              - Services
         # Use wildcard to backup all workspaces in an environment
         - id: "environment-id-2"
           workspaces:
               - id: "*"
+          identities:
+              - User
         # Use wildcard to backup all environments
         # - id: "*"
-    identities:
-        - User
-        - Services
 ```
 
 ### Configuration Options
@@ -56,7 +58,7 @@ plainid:
         -   `id`: Environment ID (can be a specific ID or "\*" to match all environments)
         -   `workspaces`: List of workspaces within the environment:
             -   `id`: Workspace ID (can be a specific ID or "\*" to match all workspaces)
-    -   `plainid.identities`: List of identity types to backup.
+        -   `identities`: List of identity types to backup for this environment.
 
 ## Usage
 

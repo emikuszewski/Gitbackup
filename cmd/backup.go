@@ -192,8 +192,14 @@ func fetchPlainIDConfiguration(envDir, wsDir, envID, wsID string) error {
 		}
 	}
 
-	// Process identity templates
-	for _, identity := range cfg.PlainID.Identities {
+	// Get the environment configuration
+	env := cfg.PlainID.FindEnvironment(envID)
+	if env == nil {
+		return fmt.Errorf("environment %s not found in configuration", envID)
+	}
+
+	// Process identity templates using identities from the environment config
+	for _, identity := range env.Identities {
 		identityTemplates, err := plainIDService.IdentityTemplates(envID, identity)
 		if err != nil {
 			return fmt.Errorf("failed to fetch app identity templates: %w", err)
