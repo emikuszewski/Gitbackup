@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/go-git/go-git/v5"
@@ -52,14 +53,27 @@ var backupCmd = &cobra.Command{
 		for _, env := range cfg.PlainID.Envs {
 			envID := env.ID
 			envName := env.Name
+			log.Info().Msgf("Processing environment %s (%s) ...", envName, envID)
 			envDir := fmt.Sprintf("%s/%s_%s", tempDir, envName, envID)
+
+			// remove all files (identity files) from the directory first (except directories)
+			err = removeFilesOnly(envDir)
+			if err != nil {
+				return fmt.Errorf("failed to remove files from env directory: %w", err)
+			}
+
+			err := fetchPlainIDEnvStuff(envDir, envID)
+			if err != nil {
+				return fmt.Errorf("failed to fetch PlainID Env configuration for env:%s: %w", envID, err)
+			}
 
 			for _, ws := range env.Workspaces {
 				wsID := ws.ID     // unique
 				wsName := ws.Name // unique and required
 
+				log.Info().Msgf("Processing workspace %s (%s) ...", wsName, wsID)
 				wsDir := fmt.Sprintf("%s/%s", envDir, wsName)
-				// delete directory content first
+				// delete workspace content first
 				err = os.RemoveAll(wsDir)
 				if err != nil {
 					return fmt.Errorf("failed to remove workspace directory: %w", err)
@@ -68,9 +82,9 @@ var backupCmd = &cobra.Command{
 					return fmt.Errorf("failed to create workspace directory: %w", err)
 				}
 
-				err := fetchPlainIDConfiguration(envDir, wsDir, envID, wsID)
+				err := fetchPlainIDWSStuff(wsDir, envID, wsID)
 				if err != nil {
-					return fmt.Errorf("failed to fetch PlainID configuration for env:%s ws:%s: %w", envID, wsID, err)
+					return fmt.Errorf("failed to fetch PlainID WS configuration for env:%s ws:%s: %w", envID, wsID, err)
 				}
 				// Add to commit message
 				commitMsg += fmt.Sprintf(" env:%s ws:%s", envID, wsID)
@@ -167,9 +181,7 @@ var backupCmd = &cobra.Command{
 	},
 }
 
-// fetchPlainIDConfiguration fetches the PlainID configuration and writes it to a folder,
-// returns paths to all created files
-func fetchPlainIDConfiguration(envDir, wsDir, envID, wsID string) error {
+func fetchPlainIDWSStuff(wsDir, envID, wsID string) error {
 	apps, err := plainIDService.Applications(envID, wsID)
 	if err != nil {
 		return fmt.Errorf("failed to fetch apps: %w", err)
@@ -192,16 +204,10 @@ func fetchPlainIDConfiguration(envDir, wsDir, envID, wsID string) error {
 		}
 	}
 
-	// Process identity templates
-	for _, identity := range cfg.PlainID.Identities {
-		identityTemplates, err := plainIDService.IdentityTemplates(envID, identity)
-		if err != nil {
-			return fmt.Errorf("failed to fetch app identity templates: %w", err)
-		}
-		path := fmt.Sprintf("%s/identity-template-%s.json", envDir, identity)
-		if err := os.WriteFile(path, []byte(identityTemplates), 0600); err != nil {
-			return fmt.Errorf("failed to write identity template: %w", err)
-		}
+	// Get the environment configuration
+	env := cfg.PlainID.FindEnvironment(envID)
+	if env == nil {
+		return fmt.Errorf("environment %s not found in configuration", envID)
 	}
 
 	for _, app := range apps {
@@ -239,7 +245,53 @@ func fetchPlainIDConfiguration(envDir, wsDir, envID, wsID string) error {
 		if err := os.WriteFile(path, []byte(apiMapperSet), 0600); err != nil {
 			return fmt.Errorf("failed to write policy: %w", err)
 		}
+	}
+	return nil
+}
 
+func fetchPlainIDEnvStuff(envDir, envID string) error {
+	// Get the environment configuration
+	env := cfg.PlainID.FindEnvironment(envID)
+	if env == nil {
+		return fmt.Errorf("environment %s not found in configuration", envID)
+	}
+
+	// Process identity templates using identities from the environment config
+	for _, identity := range env.Identities {
+		identityTemplates, err := plainIDService.IdentityTemplates(envID, identity)
+		if err != nil {
+			return fmt.Errorf("failed to fetch app identity templates: %w", err)
+		}
+		path := fmt.Sprintf("%s/identity-template-%s.json", envDir, identity)
+		if err := os.WriteFile(path, []byte(identityTemplates), 0600); err != nil {
+			return fmt.Errorf("failed to write identity template: %w", err)
+		}
+	}
+	return nil
+}
+func removeFilesOnly(dir string) error {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		// If directory doesn't exist, no need to remove anything
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+
+	for _, entry := range entries {
+		path := filepath.Join(dir, entry.Name())
+		if entry.IsDir() {
+			// Recursively clean subdirectories
+			if err := removeFilesOnly(path); err != nil {
+				return err
+			}
+		} else {
+			// Remove files
+			if err := os.Remove(path); err != nil {
+				return err
+			}
+		}
 	}
 
 	return nil
