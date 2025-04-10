@@ -11,6 +11,9 @@ import (
 	"github.com/spf13/viper"
 )
 
+// Default configuration file name
+const DefaultConfigFileName = ".git-backup"
+
 // GitConfig holds the git-specific configuration
 type GitConfig struct {
 	Repo   string `mapstructure:"repo"`
@@ -29,6 +32,7 @@ type Environment struct {
 	ID         string `mapstructure:"id"`
 	Name       string
 	Workspaces []Workspace `mapstructure:"workspaces"`
+	Identities []string    `mapstructure:"identities"`
 }
 
 // HasWildcardWorkspace checks if the environment has a wildcard workspace configuration
@@ -63,7 +67,6 @@ type PlainIDConfig struct {
 	ClientID     string        `mapstructure:"client-id"`
 	ClientSecret string        `mapstructure:"client-secret"`
 	Envs         []Environment `mapstructure:"envs"`
-	Identities   []string      `mapstructure:"identities"`
 }
 
 // HasWildcardEnvironment checks if there's a wildcard environment in the configuration
@@ -126,11 +129,29 @@ type Config struct {
 func LoadConfig(flagSet *pflag.FlagSet) (*Config, error) {
 	v := viper.New()
 
-	// Set config name and paths
-	v.SetConfigName(".git-backup")
-	v.SetConfigType("yaml")
-	v.AddConfigPath(".")
-	v.AddConfigPath(homeDir())
+	// Bind command line flags if provided
+	if flagSet != nil {
+		if err := v.BindPFlags(flagSet); err != nil {
+			return nil, fmt.Errorf("failed to bind flags: %w", err)
+		}
+
+		// Check if custom config file is specified
+		if flagSet.Changed("file") {
+			configFile, _ := flagSet.GetString("file")
+			if configFile != "" {
+				// If path provided, use it directly
+				v.SetConfigFile(configFile)
+			}
+		}
+	}
+
+	// If no custom config file specified, use defaults
+	if v.ConfigFileUsed() == "" {
+		v.SetConfigName(DefaultConfigFileName)
+		v.SetConfigType("yaml")
+		v.AddConfigPath(".")
+		v.AddConfigPath(homeDir())
+	}
 
 	// Read config file if it exists
 	if err := v.ReadInConfig(); err != nil {
@@ -143,13 +164,6 @@ func LoadConfig(flagSet *pflag.FlagSet) (*Config, error) {
 	// Bind environment variables
 	v.SetEnvKeyReplacer(strings.NewReplacer("-", "_", ".", "_"))
 	v.AutomaticEnv()
-
-	// Bind command line flags if provided
-	if flagSet != nil {
-		if err := v.BindPFlags(flagSet); err != nil {
-			return nil, fmt.Errorf("failed to bind flags: %w", err)
-		}
-	}
 
 	// Unmarshal config
 	var cfg Config
@@ -167,6 +181,9 @@ func LoadConfig(flagSet *pflag.FlagSet) (*Config, error) {
 
 // RegisterFlags registers all the configuration flags with the provided flag set
 func RegisterFlags(flagSet *pflag.FlagSet) {
+	// Config file flag
+	flagSet.StringP("file", "f", "", "Path to config file (default is .git-backup in current directory or home directory)")
+
 	// Git configuration
 	flagSet.String("git.repo", "", "Git repository URL (git@ or https:// URL)")
 	flagSet.String("git.token", "", "Git token for authentication")
@@ -217,12 +234,11 @@ func validateConfig(cfg *Config) error {
 			if len(env.Workspaces) == 0 && !env.IsWildcard() {
 				missingFields = append(missingFields, fmt.Sprintf("plainid.envs[%d].workspaces", i))
 			}
+			// Check for identities in each environment
+			if len(env.Identities) == 0 {
+				missingFields = append(missingFields, fmt.Sprintf("plainid.envs[%d].identities", i))
+			}
 		}
-	}
-
-	// Check for identities
-	if len(cfg.PlainID.Identities) == 0 {
-		missingFields = append(missingFields, "plainid.identities")
 	}
 
 	if len(missingFields) > 0 {
@@ -245,7 +261,7 @@ func homeDir() string {
 func DefaultConfigFilePath() string {
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return ".git-backup"
+		return DefaultConfigFileName
 	}
-	return filepath.Join(home, ".git-backup")
+	return filepath.Join(home, DefaultConfigFileName)
 }
