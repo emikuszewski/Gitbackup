@@ -216,6 +216,8 @@ func fetchPlainIDWSStuff(wsDir, envID, wsID string) error {
 			return fmt.Errorf("failed to create application directory: %w", err)
 		}
 
+		log.Info().Msgf("Processing application %s (%s) ...", app.Name, app.ID)
+
 		path := fmt.Sprintf("%s/application.json", appDir)
 		appJSON, err := app.AsJSON()
 		if err != nil {
