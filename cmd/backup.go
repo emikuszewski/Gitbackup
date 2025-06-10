@@ -281,6 +281,26 @@ func fetchPlainIDEnvStuff(envDir, envID string) error {
 			return fmt.Errorf("failed to write identity template: %w", err)
 		}
 	}
+
+	// Fetch PAA groups
+	paaGroups, err := plainIDService.PAAGroups(envID)
+	if err != nil {
+		return fmt.Errorf("failed to fetch PAA groups: %w", err)
+	}
+
+	for _, paaGroup := range paaGroups {
+		log.Info().Msgf("Processing PAA group %s ...", paaGroup.ID)
+		path := fmt.Sprintf("%s/paa-group_%s.json", envDir, paaGroup.ID)
+		paaGroupJSON, err := paaGroup.ToJSON()
+		if err != nil {
+			return fmt.Errorf("failed to convert PAA group to JSON: %w", err)
+		}
+
+		if err := os.WriteFile(path, []byte(paaGroupJSON), 0600); err != nil {
+			return fmt.Errorf("failed to write identity template: %w", err)
+		}
+	}
+
 	return nil
 }
 func removeFilesOnly(dir string) error {

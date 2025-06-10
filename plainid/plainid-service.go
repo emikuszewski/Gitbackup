@@ -569,6 +569,12 @@ type PAAGroupSource struct {
 	PaasProperties []map[string]any   `json:"paasProperties"`
 }
 
+type PAAGroupViews struct {
+	Type  string `json:"type"`
+	PAAID string `json:"paaId"`
+	Text  string `json:"text"`
+}
+
 type PAAGroup struct {
 	ID                  string           `json:"id"`
 	PAAGroupType        string           `json:"paaGroupType"`
@@ -578,8 +584,10 @@ type PAAGroup struct {
 	Sources             []PAAGroupSource `json:"sources"`
 }
 
-type PAAGroupViews struct {
-	Type  string `json:"type"`
-	PAAID string `json:"paaId"`
-	Text  string `json:"text"`
+func (p PAAGroup) ToJSON() (string, error) {
+	b, err := json.Marshal(p)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal PAAGroup to JSON: %w", err)
+	}
+	return string(b), nil
 }
