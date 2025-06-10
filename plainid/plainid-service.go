@@ -9,6 +9,7 @@ import (
 	"net/url"
 
 	"github.com/plainid/git-backup/config"
+	"github.com/rs/zerolog/log"
 	"golang.org/x/oauth2/clientcredentials"
 )
 
@@ -64,7 +65,6 @@ type Service struct {
 }
 
 func NewService(cfg config.Config) *Service {
-
 	oauth2Config := clientcredentials.Config{
 		ClientID:     cfg.PlainID.ClientID,
 		ClientSecret: cfg.PlainID.ClientSecret,
@@ -81,6 +81,7 @@ func NewService(cfg config.Config) *Service {
 
 func (s Service) Environments() ([]Environment, error) {
 	baseURL := fmt.Sprintf("%s/env-mgmt/environment", s.cfg.PlainID.BaseURL)
+	log.Debug().Msgf("Fetching environments from PlainID %s...", baseURL)
 
 	req, err := http.NewRequest("GET", baseURL, nil)
 	if err != nil {

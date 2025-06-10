@@ -21,7 +21,7 @@ var backupCmd = &cobra.Command{
 	Use:   "backup",
 	Short: "Backup PlainID configuration to git",
 	Long:  `Backup PlainID configuration to git and create a new tagged version.`,
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(cmd *cobra.Command, args []string) (err error) {
 		log.Info().Msg("Executing backup command")
 		if cfg.DryRun {
 			log.Info().Msg("Dry run mode: will download configuration but won't push to git")
@@ -32,7 +32,12 @@ var backupCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer repository.CleanupTempDir(tempDir)
+		defer func() {
+			if err == nil && cfg.Git.DeleteTempOnSuccess {
+				repository.CleanupTempDir(tempDir)
+			}
+
+		}()
 
 		log.Info().Msgf("Temporary directory created: %s", tempDir)
 
@@ -55,6 +60,11 @@ var backupCmd = &cobra.Command{
 			envName := env.Name
 			log.Info().Msgf("Processing environment %s (%s) ...", envName, envID)
 			envDir := fmt.Sprintf("%s/%s_%s", tempDir, envName, envID)
+
+			// please create a directory if it doesn't exist
+			if err = os.MkdirAll(envDir, 0755); err != nil {
+				return fmt.Errorf("failed to create environment directory: %w", err)
+			}
 
 			// remove all files (identity files) from the directory first (except directories)
 			err = removeFilesOnly(envDir)
@@ -258,6 +268,8 @@ func fetchPlainIDEnvStuff(envDir, envID string) error {
 		return fmt.Errorf("environment %s not found in configuration", envID)
 	}
 
+	log.Info().Msgf("Fetching PlainID environment configuration for %s ...", envID)
+
 	// Process identity templates using identities from the environment config
 	for _, identity := range env.Identities {
 		identityTemplates, err := plainIDService.IdentityTemplates(envID, identity)
@@ -272,6 +284,7 @@ func fetchPlainIDEnvStuff(envDir, envID string) error {
 	return nil
 }
 func removeFilesOnly(dir string) error {
+	log.Info().Msgf("clearning up directory %s ...", dir)
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		// If directory doesn't exist, no need to remove anything

@@ -16,9 +16,10 @@ const DefaultConfigFileName = ".git-backup"
 
 // GitConfig holds the git-specific configuration
 type GitConfig struct {
-	Repo   string `mapstructure:"repo"`
-	Token  string `mapstructure:"token"`
-	Branch string `mapstructure:"branch"`
+	Repo                string `mapstructure:"repo"`
+	Token               string `mapstructure:"token"`
+	Branch              string `mapstructure:"branch"`
+	DeleteTempOnSuccess bool   `mapstructure:"delete-temp-on-success"`
 }
 
 // Workspace represents a PlainID workspace
@@ -188,6 +189,7 @@ func RegisterFlags(flagSet *pflag.FlagSet) {
 	flagSet.String("git.repo", "", "Git repository URL (git@ or https:// URL)")
 	flagSet.String("git.token", "", "Git token for authentication")
 	flagSet.String("git.branch", "main", "Git branch for storing configuration files")
+	flagSet.Bool("git.delete-temp-on-success", false, "Delete temporary files on successful backup")
 
 	// PlainID configuration
 	flagSet.String("plainid.base-url", "", "PlainID token endpoint URL")
