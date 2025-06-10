@@ -448,85 +448,138 @@ func (s Service) IdentityTemplates(envID, identityID string) (string, error) {
 	return string(body), nil
 }
 
-func (s Service) PAAGroups(envID string) (string, error) {
-	baseURL := fmt.Sprintf("%s/api/1.0/paa-groups/%s?limit=10000&detailed=true", s.cfg.PlainID.BaseURL, envID)
+type AppCaller[T any] struct {
+	client *http.Client
+}
+
+func NewAppCaller[T any](client *http.Client) *AppCaller[T] {
+	return &AppCaller[T]{
+		client: client,
+	}
+}
+func (a AppCaller[T]) Call(baseURL string) (*T, error) {
 	req, err := http.NewRequest("GET", baseURL, nil)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	req.Header.Set("Accept", "application/json")
 
-	resp, err := s.client.Do(req)
+	resp, err := a.client.Do(req)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("failed to download apps for %s: %s %s", envID, resp.Status, body)
+		return nil, fmt.Errorf("failed to call %s: %s %s", baseURL, resp.Status, body)
 	}
 
-	type paaGroupsResp struct {
-		Data []struct {
-			ID                  string `json:"id"`
-			PAAGroupType        string `json:"paaGroupType"`
-			PAAsCount           int    `json:"paasCount"`
-			HasInactiveSyncPaas bool   `json:"hasInactiveSyncPaas"`
-		}
-	}
+	log.Debug().Msgf("Response from %s: %s", baseURL, string(body))
 
-	println(string(body))
-	var appResponse paaGroupsResp
+	var appResponse T
 	err = json.Unmarshal(body, &appResponse)
 	if err != nil {
-		return "", fmt.Errorf("failed to parse applications response: %w", err)
+		return nil, fmt.Errorf("failed to parse response: %w", err)
 	}
 
-	for _, paaGroup := range appResponse.Data {
+	return &appResponse, nil
+}
 
-		baseURL = fmt.Sprintf("%s/api/1.0/paa-groups/%s/%s/sources?limit=10000&detailed=true", s.cfg.PlainID.BaseURL, envID, paaGroup.ID)
-		req, err := http.NewRequest("GET", baseURL, nil)
-		if err != nil {
-			return "", err
-		}
-		req.Header.Set("Accept", "application/json")
-
-		resp, err := s.client.Do(req)
-		if err != nil {
-			return "", err
-		}
-		defer resp.Body.Close()
-
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return "", err
-		}
-
-		if resp.StatusCode != http.StatusOK {
-			return "", fmt.Errorf("failed to download apps for %s: %s %s", envID, resp.Status, body)
-		}
-
-		type paaGroupsResp struct {
-			Data []struct {
-				ID                  string `json:"id"`
-				PAAGroupType        string `json:"paaGroupType"`
-				PAAsCount           int    `json:"paasCount"`
-				HasInactiveSyncPaas bool   `json:"hasInactiveSyncPaas"`
-			}
-		}
-
-		println(string(body))
-		var appResponse paaGroupsResp
-		err = json.Unmarshal(body, &appResponse)
-		if err != nil {
-			return "", fmt.Errorf("failed to parse applications response: %w", err)
-		}
-
+func (s Service) PAAGroups(envID string) ([]PAAGroup, error) {
+	type paaGroupsResp struct {
+		Data []PAAGroup `json:"data"`
 	}
-	return string(body), nil
+
+	baseURL := fmt.Sprintf("%s/api/1.0/paa-groups/%s?limit=10000&detailed=true", s.cfg.PlainID.BaseURL, envID)
+
+	paaGroups, err := NewAppCaller[paaGroupsResp](s.client).Call(baseURL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch PAA groups for %s: %w", envID, err)
+	}
+
+	// Fetch sources and views for each group
+	for i, paaGroup := range paaGroups.Data {
+		// Fetch sources for this group
+		type paaGroupsSourcesResp struct {
+			Data []PAAGroupSource `json:"data"`
+		}
+
+		baseURL := fmt.Sprintf("%s/api/1.0/paa-groups/%s/%s/sources?limit=1000&detailed=true", s.cfg.PlainID.BaseURL, envID, paaGroup.ID)
+
+		paaGroupSources, err := NewAppCaller[paaGroupsSourcesResp](s.client).Call(baseURL)
+		if err != nil {
+			return nil, fmt.Errorf("failed to fetch PAA group sources for %s: %w", paaGroup.ID, err)
+		}
+
+		// Assign sources directly to the group
+		paaGroups.Data[i].Sources = paaGroupSources.Data
+
+		// Fetch views for this group
+		type paaGroupsViewsResp struct {
+			Data []PAAGroupViews `json:"data"`
+		}
+
+		baseURL = fmt.Sprintf("%s/api/1.0/paa-groups/%s/%s/views", s.cfg.PlainID.BaseURL, envID, paaGroup.ID)
+
+		paaGroupViews, err := NewAppCaller[paaGroupsViewsResp](s.client).Call(baseURL)
+		if err != nil {
+			return nil, fmt.Errorf("failed to fetch PAA group views for %s: %w", paaGroup.ID, err)
+		}
+
+		// Assign views directly to the group
+		paaGroups.Data[i].Views = paaGroupViews.Data
+	}
+
+	return paaGroups.Data, nil
+}
+
+type PAAGroupTranslator struct {
+	Name       string         `json:"name"`
+	Type       string         `json:"type"`
+	Properties map[string]any `json:"properties"`
+}
+
+type PAAGroupModel struct {
+	Type        string           `json:"type"`
+	ModelID     string           `json:"modelId"`
+	PAAGroupID  string           `json:"paaGroupId"`
+	IsVisible   bool             `json:"visible"`
+	Name        string           `json:"name"`
+	Description string           `json:"description"`
+	SourceIDs   []string         `json:"sourceIds"`
+	Properties  map[string]any   `json:"properties"`
+	Metadata    []map[string]any `json:"metadata"`
+}
+
+type PAAGroupSource struct {
+	ID             string             `json:"sourceId"`
+	PAAGroupID     string             `json:"paaGroupId"`
+	Adapter        string             `json:"adapter"`
+	Name           string             `json:"name"`
+	Status         string             `json:"status"`
+	Description    string             `json:"description"`
+	Properties     map[string]any     `json:"properties"`
+	Translator     PAAGroupTranslator `json:"translator"`
+	Models         []PAAGroupModel    `json:"models"`
+	PaasProperties []map[string]any   `json:"paasProperties"`
+}
+
+type PAAGroup struct {
+	ID                  string           `json:"id"`
+	PAAGroupType        string           `json:"paaGroupType"`
+	PAAsCount           int              `json:"paasCount"`
+	HasInactiveSyncPaas bool             `json:"hasInactiveSyncPaas"`
+	Views               []PAAGroupViews  `json:"views"`
+	Sources             []PAAGroupSource `json:"sources"`
+}
+
+type PAAGroupViews struct {
+	Type  string `json:"type"`
+	PAAID string `json:"paaId"`
+	Text  string `json:"text"`
 }
