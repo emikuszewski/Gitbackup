@@ -447,3 +447,86 @@ func (s Service) IdentityTemplates(envID, identityID string) (string, error) {
 
 	return string(body), nil
 }
+
+func (s Service) PAAGroups(envID string) (string, error) {
+	baseURL := fmt.Sprintf("%s/api/1.0/paa-groups/%s?limit=10000&detailed=true", s.cfg.PlainID.BaseURL, envID)
+	req, err := http.NewRequest("GET", baseURL, nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("failed to download apps for %s: %s %s", envID, resp.Status, body)
+	}
+
+	type paaGroupsResp struct {
+		Data []struct {
+			ID                  string `json:"id"`
+			PAAGroupType        string `json:"paaGroupType"`
+			PAAsCount           int    `json:"paasCount"`
+			HasInactiveSyncPaas bool   `json:"hasInactiveSyncPaas"`
+		}
+	}
+
+	println(string(body))
+	var appResponse paaGroupsResp
+	err = json.Unmarshal(body, &appResponse)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse applications response: %w", err)
+	}
+
+	for _, paaGroup := range appResponse.Data {
+
+		baseURL = fmt.Sprintf("%s/api/1.0/paa-groups/%s/%s/sources?limit=10000&detailed=true", s.cfg.PlainID.BaseURL, envID, paaGroup.ID)
+		req, err := http.NewRequest("GET", baseURL, nil)
+		if err != nil {
+			return "", err
+		}
+		req.Header.Set("Accept", "application/json")
+
+		resp, err := s.client.Do(req)
+		if err != nil {
+			return "", err
+		}
+		defer resp.Body.Close()
+
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return "", err
+		}
+
+		if resp.StatusCode != http.StatusOK {
+			return "", fmt.Errorf("failed to download apps for %s: %s %s", envID, resp.Status, body)
+		}
+
+		type paaGroupsResp struct {
+			Data []struct {
+				ID                  string `json:"id"`
+				PAAGroupType        string `json:"paaGroupType"`
+				PAAsCount           int    `json:"paasCount"`
+				HasInactiveSyncPaas bool   `json:"hasInactiveSyncPaas"`
+			}
+		}
+
+		println(string(body))
+		var appResponse paaGroupsResp
+		err = json.Unmarshal(body, &appResponse)
+		if err != nil {
+			return "", fmt.Errorf("failed to parse applications response: %w", err)
+		}
+
+	}
+	return string(body), nil
+}
