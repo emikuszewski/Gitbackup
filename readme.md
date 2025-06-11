@@ -19,6 +19,7 @@ git:
     repo: "https://github.com/organization/repo.git"
     token: "your-github-token"
     branch: "main"
+    delete-temp-on-success: false
 
 # PlainID configuration
 plainid:
@@ -50,6 +51,7 @@ plainid:
     -   `git.repo`: The git repository URL where configurations will be stored (HTTPS URL format).
     -   `git.token`: The git token used for authentication.
     -   `git.branch`: The branch where files will be stored (defaults to "main").
+    -   `git.delete-temp-on-success`: Boolean flag that controls whether temporary files are deleted after a successful backup operation (defaults to false). When set to true, temporary directories created during the backup process will be automatically cleaned up upon successful completion.
 
 -   **PlainID Configuration**:
     -   `plainid.base-url`: The PlainID API base URL.

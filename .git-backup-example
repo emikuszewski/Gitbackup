@@ -4,6 +4,7 @@ git:
   repo: "https://github.com/organization/plainid-configs.git"
   token: "ghp_abcdefghijklmnopqrstuvwxyz123456"
   branch: "main"
+  delete-temp-on-success: false
 
 # PlainID configuration
 plainid:
@@ -21,7 +22,6 @@ plainid:
     #   workspaces:
     #     - id: "*"
     # - id: "*"
-
 # Command options
 # Uncomment to enable dry run mode
 # dry-run: true
