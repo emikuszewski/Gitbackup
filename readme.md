@@ -61,7 +61,8 @@ plainid:
         -   `id`: Environment ID (can be a specific ID or "\*" to match all environments)
         -   `workspaces`: List of workspaces within the environment:
             -   `id`: Workspace ID (can be a specific ID or "\*" to match all workspaces)
-        -   `identities`: List of identity types to backup for this environment.
+        -   `identities`: List of identity types to backup for this environment. (can be "\*" to match all identities).  
+            Please notice if you're not using the wildcard "\*" for identities, identities you specify must exist in the PlainID environment, otherwise the backup will fail.
 
 ## Usage
 

@@ -99,7 +99,7 @@ rollback to a previous version if needed.`,
 				var newIdentities []string
 				if cfgEnvs[i].HasWildcardIdentities() {
 					for _, identity := range identities {
-						newIdentities = append(newIdentities, identity.Name)
+						newIdentities = append(newIdentities, identity.TemplateID)
 					}
 					cfgEnvs[i].Identities = newIdentities
 				}

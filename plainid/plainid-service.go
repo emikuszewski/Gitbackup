@@ -52,8 +52,9 @@ type Workspace struct {
 }
 
 type Identity struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
+	ID         string `json:"id"`
+	Name       string `json:"name"`
+	TemplateID string `json:"identityTemplateId"`
 }
 
 func (s Application) AsJSON() (string, error) {
