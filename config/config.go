@@ -46,6 +46,15 @@ func (e *Environment) HasWildcardWorkspace() bool {
 	return false
 }
 
+func (e *Environment) HasWildcardIdentities() bool {
+	for _, identity := range e.Identities {
+		if identity == "*" {
+			return true
+		}
+	}
+	return false
+}
+
 // ContainsWorkspace checks if a specific workspace ID is included in this environment
 // It returns true if the workspace ID matches or if there's a wildcard
 func (e *Environment) ContainsWorkspace(workspaceID string) bool {

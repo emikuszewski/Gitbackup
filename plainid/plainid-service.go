@@ -51,6 +51,11 @@ type Workspace struct {
 	Name string `json:"name"`
 }
 
+type Identity struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
 func (s Application) AsJSON() (string, error) {
 	b, err := json.Marshal(s)
 	if err != nil {
@@ -152,6 +157,42 @@ func (s Service) Workspaces(envID string) ([]Workspace, error) {
 	}
 
 	return wssResp.Data, nil
+}
+
+func (s Service) Identities(envID string) ([]Identity, error) {
+	baseURL := fmt.Sprintf("%s/env-mgmt/1.0/identity-workspaces/%s?offset=0&limit=100", s.cfg.PlainID.BaseURL, envID)
+
+	req, err := http.NewRequest("GET", baseURL, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("failed to get environments for whildcard:  %s %s", resp.Status, body)
+	}
+
+	type IdentitiesResponse struct {
+		Data []Identity `json:"data"`
+	}
+
+	var identitiesResp IdentitiesResponse
+	err = json.Unmarshal(body, &identitiesResp)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse workspaces response: %w", err)
+	}
+
+	return identitiesResp.Data, nil
 }
 
 func (s Service) Applications(envID, wsID string) ([]Application, error) {

@@ -89,6 +89,22 @@ rollback to a previous version if needed.`,
 				cfgEnvs[i].Workspaces = newWSs
 			}
 
+			// Process identities for each environment
+			for i := range cfgEnvs {
+				identities, err := plainIDService.Identities(cfgEnvs[i].ID)
+				if err != nil {
+					return fmt.Errorf("failed to get identities for environment %s: %w", cfgEnvs[i].ID, err)
+				}
+
+				var newIdentities []string
+				if cfgEnvs[i].HasWildcardIdentities() {
+					for _, identity := range identities {
+						newIdentities = append(newIdentities, identity.Name)
+					}
+					cfgEnvs[i].Identities = newIdentities
+				}
+			}
+
 			cfg.PlainID.Envs = cfgEnvs
 			return nil
 		},
