@@ -304,7 +304,7 @@ func fetchPlainIDEnvStuff(envDir, envID string) error {
 	return nil
 }
 func removeFilesOnly(dir string) error {
-	log.Info().Msgf("clearning up directory %s ...", dir)
+	log.Info().Msgf("cleaning up directory %s ...", dir)
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		// If directory doesn't exist, no need to remove anything
