@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 
 	"github.com/plainid/git-backup/config"
@@ -44,6 +45,9 @@ rollback to a previous version if needed.`,
 					cfgEnvs = append(cfgEnvs, config.Environment{
 						ID:   env.ID,
 						Name: env.Name,
+						Workspaces: []config.Workspace{ // if we have a wildcard environment, we assume all workspaces are included
+							{ID: "*"}},
+						Identities: []string{"*"},
 					})
 				}
 			} else {
@@ -114,7 +118,7 @@ rollback to a previous version if needed.`,
 // Execute adds all child commands to the root command and sets flags appropriately.
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
-		fmt.Println(err)
+		log.Error().Err(err).Msg("Failed to execute command")
 		os.Exit(1)
 	}
 }

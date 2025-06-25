@@ -125,6 +125,7 @@ func (s Service) Environments() ([]Environment, error) {
 
 func (s Service) Workspaces(envID string) ([]Workspace, error) {
 	baseURL := fmt.Sprintf("%s/env-mgmt/1.0-int.1/authorization-workspaces/%s?offset=0&limit=100", s.cfg.PlainID.BaseURL, envID)
+	log.Info().Msgf("Fetching workspaces for environment %s from PlainID %s...", envID, baseURL)
 
 	req, err := http.NewRequest("GET", baseURL, nil)
 	if err != nil {
@@ -466,6 +467,9 @@ func (s Service) AssetTemplate(envID, assetTemplateID string) (string, error) {
 
 func (s Service) IdentityTemplates(envID, identityID string) (string, error) {
 	baseURL := fmt.Sprintf("%s/api/1.0/identity-templates/%s/%s", s.cfg.PlainID.BaseURL, envID, identityID)
+
+	println(baseURL)
+
 	req, err := http.NewRequest("GET", baseURL, nil)
 	if err != nil {
 		return "", err

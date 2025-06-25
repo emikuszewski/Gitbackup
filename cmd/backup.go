@@ -77,6 +77,7 @@ var backupCmd = &cobra.Command{
 				return fmt.Errorf("failed to fetch PlainID Env configuration for env:%s: %w", envID, err)
 			}
 
+			log.Info().Msgf("Number workspaces %d for %s", len(env.Workspaces), envID)
 			for _, ws := range env.Workspaces {
 				wsID := ws.ID     // unique
 				wsName := ws.Name // unique and required
@@ -271,6 +272,7 @@ func fetchPlainIDEnvStuff(envDir, envID string) error {
 	log.Info().Msgf("Fetching PlainID environment configuration for %s ...", envID)
 
 	// Process identity templates using identities from the environment config
+	log.Info().Msgf("Number of identities %d for %s", len(env.Identities), envID)
 	for _, identity := range env.Identities {
 		identityTemplates, err := plainIDService.IdentityTemplates(envID, identity)
 		if err != nil {
@@ -288,6 +290,7 @@ func fetchPlainIDEnvStuff(envDir, envID string) error {
 		return fmt.Errorf("failed to fetch PAA groups: %w", err)
 	}
 
+	log.Info().Msgf("Number of PAA groups %d for %s", len(paaGroups), envID)
 	for _, paaGroup := range paaGroups {
 		log.Info().Msgf("Processing PAA group %s ...", paaGroup.ID)
 		path := fmt.Sprintf("%s/paa-group_%s.json", envDir, paaGroup.ID)
@@ -303,6 +306,7 @@ func fetchPlainIDEnvStuff(envDir, envID string) error {
 
 	return nil
 }
+
 func removeFilesOnly(dir string) error {
 	log.Info().Msgf("cleaning up directory %s ...", dir)
 	entries, err := os.ReadDir(dir)
